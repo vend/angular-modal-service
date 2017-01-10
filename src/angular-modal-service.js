@@ -61,8 +61,15 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
 
           //  Create a new scope for the modal.
           var modalScope = (options.scope || $rootScope).$new();
-          var rootScopeOnClose = $rootScope.$on('$locationChangeSuccess', function() {
-            cleanUpClose();
+
+          // Automatically close the modal if the route changes. We bind this in a $timeout as sometimes (particularly
+          // if using ui-router) locationChangeSuccess hasn't fired yet when the new route's controller code is run
+          // and if that code triggered a modal it would get closed immediately when locationChangeSuccess was fired.
+          var rootScopeOnClose;
+          $timeout(function() {
+            rootScopeOnClose = $rootScope.$on('$locationChangeSuccess', function() {
+              cleanUpClose();
+            });
           });
 
           //  Create the inputs object to the controller - this will include
