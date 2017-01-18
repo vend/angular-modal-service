@@ -136,13 +136,17 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
 
           function cleanUpClose(result) {
             if (!modalElement) {
+              // Clean up has already run
               return;
             }
+
+            closeDeferred.resolve(result);
 
             //  Let angular remove the element and wait for animations to finish.
             $animate.leave(modalElement)
                     .then(function () {
                       if (!modalElement) {
+                        // Clean up has already run
                         return;
                       }
 
