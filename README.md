@@ -131,7 +131,7 @@ ModalService.showModal({
 
 The `showModal` function takes an object with these fields:
 
-* `controller`: The name of the controller to created. It could be a function.
+* `controller`: The name of the controller to create. It could be a function.
 * `controllerAs` : The name of the variable on the scope instance of the controller is assigned to - (optional).
 * `templateUrl`: The URL of the HTML template to use for the modal.
 * `template`: If `templateUrl` is not specified, you can specify `template` as raw
@@ -140,12 +140,14 @@ The `showModal` function takes an object with these fields:
   is injected into the controller constructor.
 * `appendElement`: The custom angular element to append the modal to instead of default `body` element.
 * `scope`: Optional. If provided, the modal controller will use a new scope as a child of `scope` (created by calling `scope.$new()`) rather than a new scope created as a child of `$rootScope`.
+* `bodyClass`: Optional. The custom css class to append to the body while the modal is open (optional, useful when not using Bootstrap).
+* `preClose`: Optional. A function which will be called before the process of closing a modal starts. The signature is `function preClose(modal, result, delay)`. It is provided the `modal` object, the `result` which was passed to `close` and the `delay` which was passed to close.
 
 #### The Modal Object
 
 The `modal` object returned by `showModal` has this structure:
 
-* `modal.element` - The DOM element created. This is a jquery lite object (or jquery if full
+* `modal.element` - The created DOM element. This is a jquery lite object (or jquery if full
   jquery is used). If you are using a bootstrap modal, you can call `modal` on this object
   to show the modal.
 * `modal.scope` - The new scope created for the modal DOM and controller.
@@ -161,6 +163,16 @@ The `modal` object returned by `showModal` has this structure:
 The controller that is used for the modal always has one extra parameter injected, a function
 called `close`. Call this function with any parameter (the result). This result parameter is
 then passed as the parameter of the `close` and `closed` promises used by the caller.
+
+### Closing All Modals
+
+Sometimes you may way to forcibly close all open modals, for example if you are going to transition routes. You can use the `ModalService.closeModals` function for this:
+
+```js
+ModalService.closeModals(optionalResult, optionalDelay);
+```
+
+The `optionalResult` parameter is pased into all `close` promises, the `optionalDelay` parameter has the same effect as the controller `close` function delay parameter.
 
 ### Animation
 
@@ -237,11 +249,20 @@ npm run test-debug
 
 This will run the tests in Chrome, allowing you to debug.
 
+## Releasing
+
+To create a release:
+
+- Create the `dst` pack with `npm run build`
+- Merge your work to master
+- Use `npm version` to bump, e.g. `npm version patch`
+- Push and deploy `git push --tags && git push && npm deploy`
+
 ## FAQ
 
 Having problems? Check this FAQ first.
 
-**I'm using a Bootstrap Modal and the backdrop doesn't fade away**
+#### I'm using a Bootstrap Modal and the backdrop doesn't fade away
 
 This can happen if your modal template contains more than one top level element.
 Imagine this case:
@@ -263,10 +284,21 @@ It will try and make both elements into a modal. This means both elements will g
 In this case, either remove the extra elements, or find the specific element you need
 from the provided `modal.element` property.
 
-**I don't want to use the 'data-dismiss' attribute on a button, how can I close a modal manually?**
+#### The backdrop STILL does not fade away after I call `close` OR I don't want to use the 'data-dismiss' attribute on a button, how can I close a modal manually?
 
-You can check the 'Complex' sample ([complexcontroller.js](samples/complex/complexcontroller.js)). The 'Cancel' button closes without using the `data-dismiss` attribute.
-All you need to do is grab the modal element in your controller, then call the bootstrap `modal` function
+You can check the 'Complex' sample ([complexcontroller.js](samples/complex/complexcontroller.js)). The 'Cancel' button closes without using the `data-dismiss` attribute. In this case, just use the `preClose` option to ensure the bootstrap modal is removed:
+
+```js
+ModalService.showModal({
+  templateUrl: "some/bootstrap-template.html",
+  controller: "SomeController",
+  preClose: (modal) => { modal.element.modal('hide'); }
+}).then(function(modal) {
+  // etc
+});
+```
+
+Another option is to grab the modal element in your controller, then call the bootstrap `modal` function
 to manually close the modal. Then call the `close` function as normal:
 
 ```js
@@ -286,7 +318,7 @@ app.controller('ExampleModalController', [
 }]);
 ```
 
-**I'm using a Bootstrap Modal and the dialog doesn't show up**
+#### I'm using a Bootstrap Modal and the dialog doesn't show up
 
 Code is entered exactly as shown the example but when the showAModal() function fires the modal template html is appended to the body while the console outputs:
 
@@ -296,6 +328,42 @@ TypeError: undefined is not a function
 
 Pointing to the code: `modal.element.modal();`. This occurs if you are using a Bootstap modal but have not included the Bootstrap JavaScript. The recommendation is to include the modal JavaScript before AngularJS.
 
+#### How can I prevent a Bootstrap modal from being closed?
+
+If you are using a bootstrap modal and want to make sure that only the `close` function will close the modal (not a click outside or escape), use the following attributes:
+
+```html
+<div class="modal" data-backdrop="static" data-keyboard="false">
+```
+
+To do this programatically, use:
+
+```js
+ModalService.showModal({
+  templateUrl: "whatever.html",
+  controller: "WhateverController"
+}).then(function(modal) {
+  modal.element.modal({
+    backdrop: 'static',
+    keyboard: false
+  });
+  modal.close.then(function(result) {
+    //  ...etc
+  });
+});
+```
+
+Thanks [lindamarieb](https://github.com/lindamarieb) and [ledgeJumper](https://github.com/ledgeJumper)!
+
+#### Problems with Nested Modals
+
+If you are trying to nest Bootstrap modals, you will run into issues. From Bootstrap:
+
+> Bootstrap only supports one modal window at a time. Nested modals aren’t supported as we believe them to be poor user experiences.
+
+See: https://v4-alpha.getbootstrap.com/components/modal/#how-it-works
+
+Some people have been able to get them working (see https://github.com/dwmkerr/angular-modal-service/issues/176). Unfortunately, due to the lack of support in Bootstrap is has proven troublesome to support this in angular-modal-service.
 
 ## Thanks
 
@@ -309,3 +377,4 @@ Thanks go the the following contributors:
 * [maxdow](https://github.com/maxdow) - Added support for controller inlining.
 * [kernowjoe](https://github.com/kernowjoe) - Robustness around locationChange
 * [arthur-xavier](https://github.com/arthur-xavier) - Robustness when `body` element changes.
+* [stormpooper](https://github.com/StormPooper) - The new `bodyClass` feature.

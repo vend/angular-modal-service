@@ -1,6 +1,6 @@
 'use strict';
 
-let module = angular.module('angularModalService', []);
+var module = angular.module('angularModalService', []);
 
 module.factory('ModalService', ['$animate', '$document', '$compile', '$controller', '$http', '$rootScope', '$q', '$templateRequest', '$timeout',
   function($animate, $document, $compile, $controller, $http, $rootScope, $q, $templateRequest, $timeout) {
@@ -8,6 +8,9 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
   function ModalService() {
 
     var self = this;
+    
+    //  Track open modals.
+    self.openModals = [];
 
     //  Returns a promise which gets the template, either
     //  from the template parameter or via a request to the
@@ -40,6 +43,14 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
       return $animate.enter(child, parent);
     };
 
+    //  Close all modals, providing the given result to the close promise.
+    self.closeModals = function(result, delay) {
+      while (self.openModals.length) {
+        self.openModals[0].close(result, delay);
+        self.openModals.splice(0, 1);
+      }
+    };
+
     self.showModal = function(options) {
 
       //  Get the body of the document, we'll add the modal to this.
@@ -58,6 +69,9 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
       //  Get the actual html of the template.
       getTemplate(options.template, options.templateUrl)
         .then(function(template) {
+
+          //  The main modal object we will build.
+          var modal = {};
 
           //  Create a new scope for the modal.
           var modalScope = (options.scope || $rootScope).$new();
@@ -103,7 +117,7 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
             angular.extend(modalController, controllerObjBefore);
           }
 
-          //  Finally, append the modal to the dom.
+          //  Then, append the modal to the dom.
           if (options.appendElement) {
             // append to custom append element
             appendChild(options.appendElement, modalElement);
@@ -111,21 +125,27 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
             // append to body when no custom append element is specified
             appendChild(body, modalElement);
           }
+		  
+          // Finally, append any custom classes to the body
+          if(options.bodyClass) {
+            body[0].classList.add(options.bodyClass);
+          }
 
-          //  We now have a modal object...
-          var modal = {
-            controller: modalController,
-            scope: modalScope,
-            element: modalElement,
-            close: closeDeferred.promise,
-            closed: closedDeferred.promise,
-            closeModal: closeModal
-          };
+          //  Populate the modal object...
+          modal.controller = modalController;
+          modal.scope = modalScope;
+          modal.element = modalElement;
+          modal.close = closeDeferred.promise;
+          modal.closed = closedDeferred.promise;
+          modal.closeModal = closeModal;
 
           //  ...which is passed to the caller via the promise.
           deferred.resolve(modal);
 
           function closeModal(result, delay) {
+            //  If we have a pre-close function, call it.
+            if (typeof options.preClose === 'function') options.preClose(modal, result, delay);
+
             if (delay === undefined || delay === null) delay = 0;
             $timeout(function() {
 
@@ -133,6 +153,9 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
 
             }, delay);
           }
+          
+          //  We can track this modal in our open modals.
+          self.openModals.push({ modal: modal, close: inputs.close });
 
           function cleanUpClose(result) {
             if (!modalElement) {
@@ -141,6 +164,11 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
             }
 
             closeDeferred.resolve(result);
+			
+            //  Remove the custom class from the body
+            if(options.bodyClass) {
+                body[0].classList.remove(options.bodyClass);
+            }
 
             //  Let angular remove the element and wait for animations to finish.
             $animate.leave(modalElement)
@@ -155,6 +183,14 @@ module.factory('ModalService', ['$animate', '$document', '$compile', '$controlle
 
                       //  We can now clean up the scope
                       modalScope.$destroy();
+
+                      //  Remove the modal from the set of open modals.
+                      for (var i=0; i<self.openModals.length; i++) {
+                        if (self.openModals[i].modal === modal) {
+                          self.openModals.splice(i, 1);
+                          break;
+                        }
+                      }
 
                       //  Unless we null out all of these objects we seem to suffer
                       //  from memory leaks, if anyone can explain why then I'd
